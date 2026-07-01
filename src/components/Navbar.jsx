@@ -2,20 +2,24 @@ import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   Menu, X, ShoppingBag, User, Plus, Zap,
-  LogOut, Settings, Package, Search, ChevronDown,
-  Bell,
+  LogOut, Package, ChevronDown,
+  Bell, MessageCircle,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 
 export default function Navbar() {
-  const { user, logout, pendingMatches } = useApp()
+  const {
+    user, logout, pendingMatches,
+    openAddProductModal, openSearchPieceModal, openBuyTokensModal,
+    openChatWidget, chatWidget,
+  } = useApp()
+
   const [menuOpen, setMenuOpen]         = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navigate  = useNavigate()
   const location  = useLocation()
   const userRef   = useRef(null)
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handler(e) {
       if (userRef.current && !userRef.current.contains(e.target))
@@ -26,21 +30,35 @@ export default function Navbar() {
   }, [])
 
   const navLinks = [
-    { to: '/',          label: 'Inicio'     },
-    { to: '/productos', label: 'Bóveda'     },
-    { to: '/publicar',  label: 'Publicar'   },
-    { to: '/buscar-pieza', label: 'Busco'   },
+    { to: '/',          label: 'Inicio',     action: null },
+    { to: '/productos', label: 'Bóveda',     action: null },
+    { to: '/publicar',  label: 'Publicar',   action: 'publish' },
+    { to: '/buscar-pieza', label: 'Busco',   action: 'search' },
   ]
 
   const isActive = (to) =>
     to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
+
+  const handleNavClick = (link, e) => {
+    if (link.action === 'publish') {
+      e.preventDefault()
+      openAddProductModal()
+      setMenuOpen(false)
+    } else if (link.action === 'search') {
+      e.preventDefault()
+      openSearchPieceModal()
+      setMenuOpen(false)
+    }
+  }
+
+  const chatActive = chatWidget.dockOpen || chatWidget.openWindows.length > 0
 
   return (
     <nav className="sticky top-0 z-40 bg-white shadow-nav border-b border-brand-border/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
 
-          {/* ── Left: hamburger + desktop links ── */}
+          {/* Left: hamburger + desktop links */}
           <div className="flex items-center gap-6">
             <button
               onClick={() => setMenuOpen(o => !o)}
@@ -50,25 +68,25 @@ export default function Navbar() {
               {menuOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
 
-            {/* Desktop links */}
             <div className="hidden lg:flex items-center gap-1">
-              {navLinks.map(({ to, label }) => (
+              {navLinks.map(link => (
                 <Link
-                  key={to}
-                  to={to}
+                  key={link.to}
+                  to={link.to}
+                  onClick={e => handleNavClick(link, e)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150
-                    ${isActive(to)
+                    ${isActive(link.to) && !link.action
                       ? 'text-brand-secondary bg-blue-50'
                       : 'text-brand-muted hover:text-brand-primary hover:bg-brand-bg'
                     }`}
                 >
-                  {label}
+                  {link.label}
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* ── Center: logo ── */}
+          {/* Center: logo */}
           <Link to="/" className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
             <SwapLogo />
             <span className="font-bold text-brand-primary text-lg tracking-tight hidden sm:block"
@@ -77,11 +95,11 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* ── Right: token badge + actions ── */}
+          {/* Right: token badge + actions */}
           <div className="flex items-center gap-2">
-            {/* Token badge */}
-            <Link
-              to="/billetera"
+            {/* Token badge → opens modal */}
+            <button
+              onClick={openBuyTokensModal}
               className="hidden sm:flex items-center gap-2 bg-token-gradient text-white
                          rounded-full px-4 py-2 text-sm font-semibold
                          hover:brightness-110 active:scale-95 transition-all duration-150
@@ -93,7 +111,19 @@ export default function Navbar() {
               <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
                 <Plus size={11} />
               </span>
-            </Link>
+            </button>
+
+            {/* Chat messenger */}
+            <button
+              onClick={() => openChatWidget()}
+              className={`relative p-2 rounded-lg transition-colors hidden sm:flex
+                ${chatActive
+                  ? 'text-[#0084FF] bg-blue-50'
+                  : 'text-brand-muted hover:text-brand-primary hover:bg-brand-bg'}`}
+              title="Mensajes"
+            >
+              <MessageCircle size={20} />
+            </button>
 
             {/* Matches/notifications */}
             <Link
@@ -146,7 +176,11 @@ export default function Navbar() {
                   </div>
                   <UserMenuItem to="/perfil"     icon={<User size={15}/>}      label="Mi perfil" />
                   <UserMenuItem to="/inventario" icon={<Package size={15}/>}   label="Mi inventario" />
-                  <UserMenuItem to="/billetera"  icon={<Zap size={15}/>}       label="Billetera" />
+                  <UserMenuItem
+                    onClick={() => { openBuyTokensModal(); setUserMenuOpen(false) }}
+                    icon={<Zap size={15}/>}
+                    label="Billetera"
+                  />
                   <div className="border-t border-brand-border/50 mt-1 pt-1">
                     <button
                       onClick={() => { logout(); navigate('/login') }}
@@ -166,31 +200,36 @@ export default function Navbar() {
       {/* Mobile menu */}
       {menuOpen && (
         <div className="lg:hidden bg-white border-t border-brand-border px-4 py-3 space-y-1">
-          {navLinks.map(({ to, label }) => (
+          {navLinks.map(link => (
             <Link
-              key={to}
-              to={to}
-              onClick={() => setMenuOpen(false)}
+              key={link.to}
+              to={link.to}
+              onClick={e => { handleNavClick(link, e); if (!link.action) setMenuOpen(false) }}
               className={`block px-4 py-2.5 rounded-xl text-sm font-medium transition-colors
-                ${isActive(to)
+                ${isActive(link.to) && !link.action
                   ? 'text-brand-secondary bg-blue-50'
                   : 'text-brand-muted hover:text-brand-primary hover:bg-brand-bg'}`}
             >
-              {label}
+              {link.label}
             </Link>
           ))}
-          {/* Mobile token badge */}
-          <div className="pt-2 border-t border-brand-border/50">
-            <Link
-              to="/billetera"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-2 bg-token-gradient text-white
+          <div className="pt-2 border-t border-brand-border/50 space-y-2">
+            <button
+              onClick={() => { openBuyTokensModal(); setMenuOpen(false) }}
+              className="w-full flex items-center gap-2 bg-token-gradient text-white
                          rounded-xl px-4 py-2.5 text-sm font-semibold"
             >
               <Zap size={14} className="text-yellow-300" />
               <span>{user?.tokens?.toLocaleString()} Tokens</span>
               <Plus size={13} className="ml-auto" />
-            </Link>
+            </button>
+            <button
+              onClick={() => { openChatWidget(); setMenuOpen(false) }}
+              className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm
+                         font-medium text-brand-muted hover:text-brand-primary hover:bg-brand-bg"
+            >
+              <MessageCircle size={16}/> Mensajes
+            </button>
           </div>
         </div>
       )}
@@ -198,7 +237,19 @@ export default function Navbar() {
   )
 }
 
-function UserMenuItem({ to, icon, label }) {
+function UserMenuItem({ to, icon, label, onClick }) {
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-brand-text
+                   hover:bg-brand-bg transition-colors"
+      >
+        <span className="text-brand-muted">{icon}</span>
+        {label}
+      </button>
+    )
+  }
   return (
     <Link
       to={to}

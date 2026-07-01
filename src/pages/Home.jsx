@@ -43,7 +43,7 @@ const STATS = [
 ]
 
 export default function Home() {
-  const { user } = useApp()
+  const { user, openAddProductModal } = useApp()
   const navigate  = useNavigate()
   const [search, setSearch] = useState('')
   const [sliderIdx, setSliderIdx] = useState(0)
@@ -175,7 +175,7 @@ export default function Home() {
           Ir a la Bóveda <ArrowRight size={16}/>
         </button>
         <button
-          onClick={() => navigate('/publicar')}
+          onClick={() => openAddProductModal()}
           className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-brand-primary
                      text-brand-primary text-sm font-semibold hover:bg-brand-primary
                      hover:text-white active:scale-95 transition-all"

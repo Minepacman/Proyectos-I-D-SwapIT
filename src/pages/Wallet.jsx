@@ -5,7 +5,7 @@ import { TOKEN_PACKAGES, TRANSACTIONS } from '../data/mockData'
 import { useApp } from '../context/AppContext'
 
 export default function Wallet() {
-  const { user, addTokens, showToast } = useApp()
+  const { user, addTokens, showToast, openBuyTokensModal } = useApp()
 
   const [selected, setSelected]   = useState(null)
   const [loading, setLoading]     = useState(false)
@@ -32,6 +32,21 @@ export default function Wallet() {
 
   return (
     <Layout>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="section-title">Billetera</h1>
+          <p className="text-sm text-brand-muted mt-0.5">Gestiona tus Eco-Tokens</p>
+        </div>
+        <button
+          onClick={openBuyTokensModal}
+          className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-gradient
+                     text-white text-sm font-semibold shadow-md hover:brightness-110
+                     active:scale-95 transition-all"
+        >
+          <Zap size={16}/> Comprar tokens
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
         {/* ── Left: Balance + history ── */}

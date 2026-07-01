@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Plus, Zap, Star, Pencil, Trash2, ChevronRight, Package } from 'lucide-react'
 import Layout from '../components/Layout'
 import { PRODUCTS } from '../data/mockData'
@@ -8,8 +8,7 @@ import { useApp } from '../context/AppContext'
 const MY_ITEMS = PRODUCTS.slice(0, 4) // mock: user owns first 4 items
 
 export default function Inventory() {
-  const navigate = useNavigate()
-  const { showToast } = useApp()
+  const { showToast, openAddProductModal } = useApp()
   const [items, setItems] = useState(MY_ITEMS)
   const [confirm, setConfirm] = useState(null) // id to delete
 
@@ -39,7 +38,7 @@ export default function Inventory() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/publicar')}
+          onClick={() => openAddProductModal()}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-gradient
                      text-white text-sm font-semibold shadow-md hover:brightness-110
                      active:scale-95 transition-all"
@@ -68,7 +67,7 @@ export default function Inventory() {
 
       {/* Items list */}
       {items.length === 0 ? (
-        <EmptyState onPublish={() => navigate('/publicar')}/>
+        <EmptyState onPublish={() => openAddProductModal()}/>
       ) : (
         <div className="space-y-3">
           {items.map(item => (
@@ -115,7 +114,7 @@ export default function Inventory() {
                 </Link>
                 <button
                   disabled={item.status === 'En Proceso'}
-                  onClick={() => navigate(`/publicar?edit=${item.id}`)}
+                  onClick={() => openAddProductModal(item.id)}
                   className="p-2 rounded-lg text-brand-muted hover:text-brand-primary
                              hover:bg-brand-bg transition-colors
                              disabled:opacity-30 disabled:cursor-not-allowed"

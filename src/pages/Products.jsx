@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
 import { Search, SlidersHorizontal, X, ChevronRight } from 'lucide-react'
 import Layout from '../components/Layout'
 import Sidebar from '../components/Sidebar'
@@ -7,6 +8,7 @@ import ProductCard from '../components/ProductCard'
 import { PRODUCTS, FILTER_TAGS } from '../data/mockData'
 
 export default function Products() {
+  const { openSearchPieceModal } = useApp()
   const [searchParams]  = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [activeTag, setActiveTag] = useState(searchParams.get('cat') ? null : 'Todos')
@@ -130,7 +132,7 @@ export default function Products() {
               <p className="text-sm text-brand-muted mb-4">
                 Prueba con otros términos o{' '}
                 <button
-                  onClick={() => navigate('/buscar-pieza')}
+                  onClick={openSearchPieceModal}
                   className="text-brand-secondary hover:underline"
                 >
                   registra una búsqueda

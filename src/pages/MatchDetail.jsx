@@ -5,6 +5,42 @@ import Layout from '../components/Layout'
 import { MATCHES } from '../data/mockData'
 import { useApp } from '../context/AppContext'
 
+function ChatButton({ matchId, label = 'Chat', className = '' }) {
+  const { openChatWindow } = useApp()
+  const navigate = useNavigate()
+
+  const open = () => {
+    if (window.innerWidth >= 768) {
+      openChatWindow(matchId)
+    } else {
+      navigate(`/chat/${matchId}`)
+    }
+  }
+
+  return (
+    <button
+      onClick={open}
+      className={className || `flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-bg
+                 text-brand-primary text-xs font-semibold border border-brand-border
+                 hover:bg-brand-bgDark transition-colors`}
+    >
+      <MessageCircle size={14}/> {label}
+    </button>
+  )
+}
+
+function PublishButton() {
+  const { openAddProductModal } = useApp()
+  return (
+    <button
+      onClick={() => openAddProductModal()}
+      className="btn-primary max-w-xs px-6 py-2.5 text-sm"
+    >
+      Publicar pieza
+    </button>
+  )
+}
+
 // ──────────────────────────────────────────────
 // Matches list  /matches
 // ──────────────────────────────────────────────
@@ -26,7 +62,7 @@ export function MatchesList() {
             Publica tus piezas o registra búsquedas para comenzar a recibir propuestas.
           </p>
           <div className="flex gap-3 justify-center">
-            <Link to="/publicar" className="btn-primary max-w-xs px-6 py-2.5 text-sm">Publicar pieza</Link>
+            <PublishButton />
           </div>
         </div>
       ) : (
@@ -104,7 +140,11 @@ function MatchCard({ match }) {
 export function MatchDetail() {
   const { id }       = useParams()
   const navigate     = useNavigate()
-  const { showToast, setPendingMatches } = useApp()
+  const { showToast, setPendingMatches, openChatWindow } = useApp()
+  const goToChat = (matchId) => {
+    if (window.innerWidth >= 768) openChatWindow(matchId)
+    else navigate(`/chat/${matchId}`)
+  }
 
   const match = MATCHES.find(m => m.id === id)
 
@@ -127,7 +167,7 @@ export function MatchDetail() {
     if (action === 'accept') {
       showToast('¡Trueque aceptado! Se ha habilitado el chat.')
       setPendingMatches(n => Math.max(0, n - 1))
-      navigate(`/chat/${id}`)
+      goToChat(id)
     } else {
       showToast('Propuesta rechazada. Las piezas vuelven a estar disponibles.', 'info')
       navigate('/matches')
@@ -183,12 +223,7 @@ export function MatchDetail() {
               <span className="text-xs text-brand-muted ml-1">{match.counterpart.reputation}</span>
             </div>
           </div>
-          <Link to={`/chat/${id}`}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-bg
-                           text-brand-primary text-xs font-semibold border border-brand-border
-                           hover:bg-brand-bgDark transition-colors">
-            <MessageCircle size={14}/> Chat
-          </Link>
+          <ChatButton matchId={id} />
         </div>
 
         {/* Item comparison */}
@@ -264,11 +299,12 @@ export function MatchDetail() {
         )}
 
         {match.status === 'En Proceso' && (
-          <Link to={`/chat/${id}`} className="btn-primary block text-center">
-            <span className="flex items-center justify-center gap-2">
-              <MessageCircle size={16}/> Ir al chat de entrega
-            </span>
-          </Link>
+          <button
+            onClick={() => goToChat(id)}
+            className="btn-primary w-full flex items-center justify-center gap-2"
+          >
+            <MessageCircle size={16}/> Ir al chat de entrega
+          </button>
         )}
       </div>
     </Layout>

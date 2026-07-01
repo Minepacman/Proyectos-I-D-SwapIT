@@ -191,6 +191,22 @@ export const CHAT_MESSAGES = [
     timestamp: '2026-06-25T10:35:00Z',
     isOwn: true,
   },
+  {
+    id: 'msg-005',
+    matchId: 'm-001',
+    sender: 'Israel M.',
+    text: 'Hola, vi tu propuesta de trueque. ¿La placa madre sigue disponible?',
+    timestamp: '2026-06-27T14:45:00Z',
+    isOwn: false,
+  },
+  {
+    id: 'msg-006',
+    matchId: 'm-001',
+    sender: 'Tú',
+    text: 'Sí, está en perfecto estado. ¿Te interesa el intercambio por el kit RAM?',
+    timestamp: '2026-06-27T15:02:00Z',
+    isOwn: true,
+  },
 ]
 
 // ──────────────────────────────────────────────
