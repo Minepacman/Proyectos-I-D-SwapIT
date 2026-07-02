@@ -17,9 +17,10 @@ export default function Login() {
   const handle = (e) =>
     setForm(f => ({ ...f, [e.target.name]: e.target.value }))
 
-  const submit = async (e) => {
+const submit = async (e) => {
     e.preventDefault()
-    setError('')
+    setError('') // Limpiamos errores previos
+
     if (!form.email || !form.password) {
       setError('Por favor completa todos los campos.')
       return
@@ -28,14 +29,34 @@ export default function Login() {
       setError('Solo se permiten correos institucionales BUAP (@alumno.buap.mx).')
       return
     }
+    
     setLoading(true)
-    await new Promise(r => setTimeout(r, 800))
-    login(form.email, form.password)
-    showToast('¡Bienvenido de vuelta!')
-    navigate('/')
-    setLoading(false)
-  }
+    
+    try {
+      // Llamamos al AppContext
+      const { error: authError } = await login(form.email, form.password)
+      
+      if (authError) {
+        // Manejo de excepciones (RF02)
+        if (authError.message.includes('Email not confirmed')) {
+           setError('Tu cuenta aún no ha sido verificada. Revisa tu correo.')
+        } else {
+           // Mensaje genérico por seguridad (No distingue entre correo malo o pass malo)
+           setError('Credenciales incorrectas.')
+        }
+        return
+      }
 
+      // Login exitoso
+      showToast('¡Bienvenido de vuelta a Swap IT!')
+      navigate('/')
+      
+    } catch (err) {
+      setError('Ocurrió un error al intentar conectar con el servidor.')
+    } finally {
+      setLoading(false)
+    }
+  }
   return (
     <div className="min-h-screen bg-brand-bgDark flex items-center justify-center p-4">
       {/* Card */}

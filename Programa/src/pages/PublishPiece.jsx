@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Upload, X, Zap, CheckCircle, AlertCircle } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useApp } from '../context/AppContext'
+import { supabase } from '../supabaseClient'
+
 
 const CATEGORIES = [
   { value: 'hw',   label: 'Hardware de computadora' },
@@ -15,8 +17,9 @@ const CATEGORIES = [
 export default function PublishPiece() {
   const navigate   = useNavigate()
   const { showToast } = useApp()
-  const [params]   = useSearchParams()
-  const isEdit     = params.has('edit')
+  const [params] = useSearchParams()
+const editId = params.get('edit')
+const isEdit = Boolean(editId)
 
   const [form, setForm] = useState({
     name: '',
@@ -29,6 +32,113 @@ export default function PublishPiece() {
   const [errors, setErrors]   = useState({})
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState(null)
+
+  const [loadingPublication, setLoadingPublication] = useState(isEdit)
+const [existingImageUrl, setExistingImageUrl] = useState(null)
+
+useEffect(() => {
+  let cancelled = false
+
+  async function loadPublicationToEdit() {
+    if (!isEdit) {
+      setLoadingPublication(false)
+      return
+    }
+
+    try {
+      setLoadingPublication(true)
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        throw new Error('Debes iniciar sesión para editar una publicación.')
+      }
+
+      const { data, error } = await supabase
+        .from('publicaciones')
+        .select(`
+          id_publicacion,
+          descripcion,
+          estado_fisico,
+          valor_eco_tokens,
+          url_foto,
+          categorias ( nombre )
+        `)
+        .eq('id_publicacion', editId)
+        .eq('id_usuario', user.id)
+        .single()
+
+      if (error || !data) {
+        throw new Error('No se encontró la publicación o no tienes permiso para editarla.')
+      }
+
+      let name = 'Componente'
+      let description = data.descripcion || ''
+
+      const match = description.match(/^\*\*(.*?)\*\*\n\n([\s\S]*)$/)
+
+      if (match) {
+        name = match[1]
+        description = match[2]
+      }
+
+      const categoryName = Array.isArray(data.categorias)
+        ? data.categorias[0]?.nombre
+        : data.categorias?.nombre
+
+      const categoryValue = CATEGORIES.find(
+        category => category.label === categoryName
+      )?.value || ''
+
+      if (!cancelled) {
+        setForm({
+          name,
+          category: categoryValue,
+          description,
+          condition: data.estado_fisico ?? 7,
+          tokenValue: String(data.valor_eco_tokens ?? ''),
+          image: null,
+        })
+
+        setPreview(data.url_foto || null)
+        setExistingImageUrl(data.url_foto || null)
+      }
+    } catch (error) {
+      console.error('Error al cargar publicación:', error)
+
+      if (!cancelled) {
+        setErrors({
+          description: error.message || 'No se pudo cargar la publicación.',
+        })
+        showToast(error.message || 'No se pudo cargar la publicación.', 'error')
+      }
+    } finally {
+      if (!cancelled) {
+        setLoadingPublication(false)
+      }
+    }
+  }
+
+  loadPublicationToEdit()
+
+  return () => {
+    cancelled = true
+  }
+}, [editId, isEdit, showToast])
+
+
+if (loadingPublication) {
+  return (
+    <Layout>
+      <div className="py-28 text-center text-brand-muted">
+        Cargando publicación...
+      </div>
+    </Layout>
+  )
+}
 
   const handle = (e) => {
     const { name, value } = e.target
@@ -56,25 +166,142 @@ export default function PublishPiece() {
     const tv = Number(form.tokenValue)
     if (!form.tokenValue || tv < 10 || tv > 10000)
       e.tokenValue = 'El valor debe ser entre 10 y 10,000 Eco-Tokens'
-    if (!form.image && !isEdit)
-      e.image = 'Se requiere al menos una fotografía'
+   if (!form.image && !existingImageUrl) {
+  e.image = 'Se requiere al menos una fotografía'
+}
     return e
   }
 
   const submit = async (e) => {
-    e.preventDefault()
-    const err = validate()
-    if (Object.keys(err).length) { setErrors(err); return }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    showToast(isEdit ? 'Pieza actualizada' : '¡Pieza publicada en la Bóveda!')
-    navigate('/inventario')
-    setLoading(false)
+  e.preventDefault()
+
+  const err = validate()
+
+  if (Object.keys(err).length) {
+    setErrors(err)
+    return
   }
 
+  setLoading(true)
+  setErrors({})
+
+  try {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      throw new Error('Debes iniciar sesión para publicar una pieza.')
+    }
+
+    let imageUrl = existingImageUrl
+
+    // Solo sube una imagen si el usuario seleccionó una nueva.
+    if (form.image) {
+      const fileExt = form.image.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('fotos-componentes')
+        .upload(filePath, form.image, {
+          contentType: form.image.type,
+          cacheControl: '3600',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        throw new Error(`No se pudo subir la foto: ${uploadError.message}`)
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('fotos-componentes')
+        .getPublicUrl(filePath)
+
+      imageUrl = publicUrlData.publicUrl
+    }
+
+    const categoryLabel = CATEGORIES.find(
+      category => category.value === form.category
+    )?.label
+
+    if (!categoryLabel) {
+      throw new Error('La categoría seleccionada no es válida.')
+    }
+
+    const { data: catData, error: catError } = await supabase
+      .from('categorias')
+      .select('id_categoria')
+      .eq('nombre', categoryLabel)
+      .single()
+
+    if (catError || !catData) {
+      throw new Error(`No existe la categoría "${categoryLabel}".`)
+    }
+
+    const descripcionCompleta =
+      `**${form.name.trim()}**\n\n${form.description.trim()}`
+
+    const publicationData = {
+      id_categoria: catData.id_categoria,
+      descripcion: descripcionCompleta,
+      estado_fisico: Number(form.condition),
+      valor_eco_tokens: Number(form.tokenValue),
+      url_foto: imageUrl,
+      updated_at: new Date().toISOString(),
+    }
+
+    let saveError = null
+
+    if (isEdit) {
+      const { error } = await supabase
+        .from('publicaciones')
+        .update(publicationData)
+        .eq('id_publicacion', editId)
+        .eq('id_usuario', user.id)
+
+      saveError = error
+    } else {
+      const { error } = await supabase
+        .from('publicaciones')
+        .insert({
+          ...publicationData,
+          id_usuario: user.id,
+          tipo: 'Ofrezco',
+          estatus: 'Disponible',
+        })
+
+      saveError = error
+    }
+
+    if (saveError) {
+      throw new Error(
+        `${isEdit ? 'No se pudo actualizar' : 'No se pudo guardar'} la publicación: ${saveError.message}`
+      )
+    }
+
+    showToast(
+      isEdit
+        ? '¡Publicación actualizada correctamente!'
+        : '¡Pieza publicada en la Bóveda!'
+    )
+
+    navigate('/inventario')
+  } catch (error) {
+    console.error('Error al guardar publicación:', error)
+
+    setErrors({
+      description: error.message || 'No se pudo guardar la publicación.',
+    })
+
+    showToast(error.message || 'No se pudo guardar la publicación.', 'error')
+  } finally {
+    setLoading(false)
+  }
+}
   const conditionLabel = (v) =>
     v >= 9 ? 'Excelente' : v >= 7 ? 'Muy bueno' : v >= 5 ? 'Bueno' : v >= 3 ? 'Regular' : 'Deficiente'
-
+ 
   return (
     <Layout>
       <div className="max-w-2xl">
@@ -98,7 +325,16 @@ export default function PublishPiece() {
                      className="w-full h-full object-cover"/>
                 <button
                   type="button"
-                  onClick={() => { setPreview(null); setForm(f => ({ ...f, image: null })) }}
+                 onClick={() => {
+  if (form.image && existingImageUrl) {
+    setForm(f => ({ ...f, image: null }))
+    setPreview(existingImageUrl)
+  } else {
+    setForm(f => ({ ...f, image: null }))
+    setPreview(null)
+    setExistingImageUrl(null)
+  }
+}}
                   className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50
                              text-white flex items-center justify-center hover:bg-black/70"
                 >

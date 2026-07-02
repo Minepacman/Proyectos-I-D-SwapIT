@@ -1,118 +1,162 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { FILTER_TAGS } from '../data/mockData'
 
-const FILTER_SECTIONS = [
-  {
-    key: 'availability',
-    label: 'Disponibilidad',
-    options: ['Disponible (12)', 'En Proceso (3)', 'Todos'],
-  },
-  {
-    key: 'category',
-    label: 'Categoría',
-    options: ['Equipos de cómputo', 'Hardware', 'Componentes electrónicos', 'Periféricos', 'Cables'],
-  },
-  {
-    key: 'condition',
-    label: 'Estado físico',
-    options: ['Excelente (8-10)', 'Bueno (5-7)', 'Regular (3-4)', 'Todos'],
-  },
-  {
-    key: 'tokenRange',
-    label: 'Rango de Tokens',
-    options: ['0–500', '500–2000', '2000–5000', '5000+'],
-  },
-  {
-    key: 'tags',
-    label: 'Etiquetas',
-    options: ['CPUs', 'Tarjetas gráficas', 'RAM', 'SSD/HDD', 'Arduino/Pi', 'Laptops'],
-  },
+const CATEGORIES = [
+  { value: 'Equipos de cómputo', label: 'Equipos de cómputo' },
+  { value: 'Hardware de computadora', label: 'Hardware' },
+  { value: 'Componentes electrónicos', label: 'Componentes electrónicos' },
+  { value: 'Periféricos', label: 'Periféricos' },
+  { value: 'Cables y conectores', label: 'Cables' },
 ]
 
+function FilterOption({ label, checked, onChange }) {
+  return (
+    <label className="flex items-center gap-2 py-1 cursor-pointer text-xs text-brand-muted">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="w-3.5 h-3.5 rounded border-brand-border accent-brand-secondary"
+      />
+      {label}
+    </label>
+  )
+}
+
+function FilterGroup({ title, children }) {
+  return (
+    <div className="border-b border-brand-border/60 pb-4 mb-4">
+      <h3 className="text-xs font-bold uppercase text-brand-primary mb-2">
+        {title}
+      </h3>
+      {children}
+    </div>
+  )
+}
+
 export default function Sidebar({ filters, onChange }) {
-  const [open, setOpen] = useState({
-    availability: true,
-    category: true,
-    condition: false,
-    tokenRange: false,
-    tags: false,
-  })
+  const toggle = (key, value) => {
+    const current = filters[key] || []
 
-  const toggle = (key) => setOpen(o => ({ ...o, [key]: !o[key] }))
+    onChange({
+      ...filters,
+      [key]: current.includes(value)
+        ? current.filter(item => item !== value)
+        : [...current, value],
+    })
+  }
 
-  const handleCheck = (section, value) => {
-    const prev = filters[section] ?? []
-    const next = prev.includes(value)
-      ? prev.filter(v => v !== value)
-      : [...prev, value]
-    onChange({ ...filters, [section]: next })
+  const resetGroup = (key) => {
+    onChange({
+      ...filters,
+      [key]: [],
+    })
+  }
+
+  const clearAll = () => {
+    onChange({
+      availability: [],
+      categories: [],
+      condition: [],
+      tokenRange: [],
+      tags: [],
+    })
   }
 
   return (
-    <aside className="w-full">
-      <h3 className="text-xs font-bold text-brand-muted uppercase tracking-widest mb-4">
-        Filtros
-      </h3>
+    <aside className="text-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-bold uppercase text-brand-primary">
+          Filtros
+        </h2>
 
-      <div className="space-y-1">
-        {FILTER_SECTIONS.map(({ key, label, options }) => (
-          <div key={key} className="border-b border-brand-border/50 pb-1">
-            <button
-              onClick={() => toggle(key)}
-              className="w-full flex items-center justify-between py-3 text-sm
-                         font-semibold text-brand-primary hover:text-brand-secondary
-                         transition-colors"
-            >
-              {label}
-              {open[key]
-                ? <ChevronUp size={15} className="text-brand-muted" />
-                : <ChevronDown size={15} className="text-brand-muted" />
-              }
-            </button>
-
-            {open[key] && (
-              <div className="pb-3 space-y-2">
-                {options.map(opt => {
-                  const checked = (filters[key] ?? []).includes(opt)
-                  return (
-                    <label key={opt} className="flex items-center gap-2.5 cursor-pointer group">
-                      <div
-                        onClick={() => handleCheck(key, opt)}
-                        className={`w-4 h-4 rounded flex items-center justify-center border
-                                    transition-all duration-150 flex-shrink-0
-                                    ${checked
-                                      ? 'bg-brand-secondary border-brand-secondary'
-                                      : 'border-brand-border group-hover:border-brand-secondary bg-white'}`}
-                      >
-                        {checked && (
-                          <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                            <path d="M1 3L3.5 5.5L8 1" stroke="white" strokeWidth="1.5"
-                                  strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </div>
-                      <span className={`text-sm transition-colors
-                        ${checked ? 'text-brand-primary font-medium' : 'text-brand-muted group-hover:text-brand-primary'}`}>
-                        {opt}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        ))}
+        <button
+          onClick={clearAll}
+          className="text-xs text-brand-secondary hover:underline"
+        >
+          Limpiar
+        </button>
       </div>
 
-      {/* Clear filters */}
-      {Object.values(filters).some(v => v?.length > 0) && (
-        <button
-          onClick={() => onChange({})}
-          className="mt-4 text-xs font-semibold text-brand-danger hover:underline"
-        >
-          Limpiar filtros
-        </button>
-      )}
+      <FilterGroup title="Disponibilidad">
+        <FilterOption
+          label="Todos"
+          checked={(filters.availability || []).length === 0}
+          onChange={() => resetGroup('availability')}
+        />
+        <FilterOption
+          label="Disponible"
+          checked={(filters.availability || []).includes('Disponible')}
+          onChange={() => toggle('availability', 'Disponible')}
+        />
+        <FilterOption
+          label="En proceso"
+          checked={(filters.availability || []).includes('En Proceso')}
+          onChange={() => toggle('availability', 'En Proceso')}
+        />
+      </FilterGroup>
+
+      <FilterGroup title="Categoría">
+        {CATEGORIES.map(category => (
+          <FilterOption
+            key={category.value}
+            label={category.label}
+            checked={(filters.categories || []).includes(category.value)}
+            onChange={() => toggle('categories', category.value)}
+          />
+        ))}
+      </FilterGroup>
+
+      <FilterGroup title="Estado físico">
+        <FilterOption
+          label="Excelente (8-10)"
+          checked={(filters.condition || []).includes('excellent')}
+          onChange={() => toggle('condition', 'excellent')}
+        />
+        <FilterOption
+          label="Bueno (5-7)"
+          checked={(filters.condition || []).includes('good')}
+          onChange={() => toggle('condition', 'good')}
+        />
+        <FilterOption
+          label="Regular (3-4)"
+          checked={(filters.condition || []).includes('regular')}
+          onChange={() => toggle('condition', 'regular')}
+        />
+      </FilterGroup>
+
+      <FilterGroup title="Rango de Tokens">
+        <FilterOption
+          label="0-500"
+          checked={(filters.tokenRange || []).includes('0-500')}
+          onChange={() => toggle('tokenRange', '0-500')}
+        />
+        <FilterOption
+          label="500-2000"
+          checked={(filters.tokenRange || []).includes('500-2000')}
+          onChange={() => toggle('tokenRange', '500-2000')}
+        />
+        <FilterOption
+          label="2000-5000"
+          checked={(filters.tokenRange || []).includes('2000-5000')}
+          onChange={() => toggle('tokenRange', '2000-5000')}
+        />
+        <FilterOption
+          label="5000+"
+          checked={(filters.tokenRange || []).includes('5000+')}
+          onChange={() => toggle('tokenRange', '5000+')}
+        />
+      </FilterGroup>
+
+      <FilterGroup title="Etiquetas">
+        {FILTER_TAGS.map(tag => (
+          <FilterOption
+            key={tag}
+            label={tag}
+            checked={(filters.tags || []).includes(tag)}
+            onChange={() => toggle('tags', tag)}
+          />
+        ))}
+      </FilterGroup>
     </aside>
   )
 }

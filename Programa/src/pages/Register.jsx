@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext'
 import HeroIllustration from '../components/HeroIllustration'
 
 export default function Register() {
-  const { login, showToast } = useApp()
+  const { register, showToast } = useApp()
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
@@ -35,17 +35,39 @@ export default function Register() {
       e.terms = 'Debes aceptar los términos y condiciones'
     return e
   }
-
-  const submit = async (e) => {
+const submit = async (e) => {
     e.preventDefault()
     const err = validate()
-    if (Object.keys(err).length) { setErrors(err); return }
+    if (Object.keys(err).length) { 
+      setErrors(err)
+      return 
+    }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    login(form.email, form.password)
-    showToast('¡Cuenta creada! Revisa tu correo para verificar.')
-    navigate('/')
-    setLoading(false)
+    
+    try {
+      // 1. Llamamos a la función register real que creamos en el AppContext
+      const { error: authError } = await register(form.email, form.password)
+      
+      // 2. Si Supabase nos devuelve un error, lo mostramos
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          setErrors({ email: 'Este correo ya tiene una cuenta registrada.' })
+        } else {
+          setErrors({ email: 'Hubo un error al registrar: ' + authError.message })
+        }
+        return
+      }
+
+      // 3. Si no hay error, todo salió bien
+      showToast('¡Cuenta creada! Revisa tu correo institucional para verificarla.')
+      // Lo mandamos al login para que inicie sesión cuando ya haya verificado su correo
+      navigate('/login') 
+
+    } catch (err) {
+      setErrors({ email: 'Error de conexión con el servidor.' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

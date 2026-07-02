@@ -2,12 +2,10 @@ import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useApp } from './context/AppContext'
 
-// Páginas de Autenticación (Sin Layout)
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
 
-// Páginas Principales (Ya incluyen el Layout internamente)
 import Home from './pages/Home'
 import Products from './pages/Products'
 import ProductDetail from './pages/ProductDetail'
@@ -19,21 +17,25 @@ import PublishPiece from './pages/PublishPiece'
 import SearchPiece from './pages/SearchPiece'
 import { MatchesList, MatchDetail } from './pages/MatchDetail'
 
-function PublishRoute() {
-  const { openAddProductModal } = useApp()
-  useEffect(() => { openAddProductModal() }, [openAddProductModal])
-  return <Inventory />
-}
-
 function SearchRoute() {
   const { openSearchPieceModal } = useApp()
-  useEffect(() => { openSearchPieceModal() }, [openSearchPieceModal])
+
+  useEffect(() => {
+    openSearchPieceModal()
+  }, [openSearchPieceModal])
+
   return <Products />
 }
 
 export default function App() {
-  const { isAuth } = useApp()
-
+  const { isAuth, authReady } = useApp()
+if (!authReady) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      Cargando sesión...
+    </div>
+  )
+}
   if (!isAuth) {
     return (
       <Routes>
@@ -56,11 +58,16 @@ export default function App() {
       <Route path="/inventario" element={<Inventory />} />
       <Route path="/matches" element={<MatchesList />} />
       <Route path="/match/:id" element={<MatchDetail />} />
-      <Route path="/publicar" element={<PublishRoute />} />
+
+      <Route path="/publicar" element={<PublishPiece />} />
+      <Route
+        path="/publicar-pieza"
+        element={<Navigate to="/publicar" replace />}
+      />
+
       <Route path="/buscar-pieza" element={<SearchRoute />} />
-      {/* Fallback: páginas completas si se accede directamente */}
-      <Route path="/publicar-pieza" element={<PublishPiece />} />
       <Route path="/buscar" element={<SearchPiece />} />
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

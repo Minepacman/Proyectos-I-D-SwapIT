@@ -3,9 +3,16 @@ import { Zap, ArrowRight, CheckCircle } from 'lucide-react'
 import Modal from './Modal'
 import { TOKEN_PACKAGES } from '../data/mockData'
 import { useApp } from '../context/AppContext'
+import { supabase } from '../supabaseClient'
 
 export default function BuyTokensModal() {
-  const { buyTokensModalOpen, closeBuyTokensModal, user, addTokens, showToast } = useApp()
+const {
+  buyTokensModalOpen,
+  closeBuyTokensModal,
+  user,
+  setTokenBalance,
+  showToast,
+} = useApp()
 
   const [selected, setSelected] = useState(null)
   const [loading, setLoading]   = useState(false)
@@ -17,17 +24,42 @@ export default function BuyTokensModal() {
     closeBuyTokensModal()
     setTimeout(() => { setSelected(null); setPaid(false) }, 300)
   }
+const handlePay = async () => {
+  if (!selectedPkg) return
 
-  const handlePay = async () => {
-    if (!selected) return
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1200))
-    const pkg = TOKEN_PACKAGES.find(p => p.id === selected)
-    addTokens(pkg.tokens)
-    showToast(`+${pkg.tokens} Eco-Tokens añadidos a tu billetera`)
+  setLoading(true)
+
+  try {
+    const { data, error } = await supabase.rpc(
+      'simular_compra_tokens',
+      { p_tokens: selectedPkg.tokens }
+    )
+
+    if (error) throw error
+
+    const result = Array.isArray(data) ? data[0] : data
+
+    if (!result?.nuevo_saldo) {
+      throw new Error('No se pudo obtener el nuevo saldo.')
+    }
+
+    setTokenBalance(result.nuevo_saldo)
+
+    showToast(
+      `+${selectedPkg.tokens.toLocaleString()} Eco-Tokens añadidos a tu billetera`
+    )
+
     setPaid(true)
+  } catch (error) {
+    console.error('Error al comprar tokens:', error)
+    showToast(
+      error.message || 'No se pudo procesar la compra.',
+      'error'
+    )
+  } finally {
     setLoading(false)
   }
+}
 
   return (
     <Modal
@@ -150,12 +182,12 @@ export default function BuyTokensModal() {
                   <span className="w-4 h-4 border-2 border-brand-muted/30 border-t-brand-primary
                                    rounded-full animate-spin"/>
                 ) : (
-                  <>Pagar <ArrowRight size={16}/></>
+                  <>Simular pago <ArrowRight size={16}/></>
                 )}
               </button>
 
               <p className="text-[11px] text-center text-brand-muted mt-3">
-                Pagos seguros vía MercadoPago / Conekta
+                Demostración académica: compra simulada
               </p>
             </div>
           </div>

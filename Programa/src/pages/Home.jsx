@@ -1,10 +1,12 @@
-import { useState } from 'react'
+
 import { useNavigate } from 'react-router-dom'
 import { Search, ChevronLeft, ChevronRight, ArrowRight, Zap, ArrowRightLeft, Package } from 'lucide-react'
 import Layout from '../components/Layout'
 import { CATEGORIES } from '../data/mockData'
 import { useApp } from '../context/AppContext'
 
+import { useEffect, useState } from 'react'
+import { supabase } from '../supabaseClient'
 const CATEGORY_IMAGES = [
   {
     id: 'comp',
@@ -36,17 +38,24 @@ const CATEGORY_IMAGES = [
   },
 ]
 
-const STATS = [
-  { label: 'Piezas disponibles', value: '468', icon: <Package size={20}/> },
-  { label: 'Intercambios completados', value: '124', icon: <ArrowRightLeft size={20}/> },
-  { label: 'Eco-Tokens circulando', value: '48K', icon: <Zap size={20}/> },
-]
+
+
+
 
 export default function Home() {
-  const { user, openAddProductModal } = useApp()
+ const { user } = useApp()
   const navigate  = useNavigate()
   const [search, setSearch] = useState('')
   const [sliderIdx, setSliderIdx] = useState(0)
+
+
+const [stats, setStats] = useState({
+  piezasDisponibles: 0,
+  intercambiosCompletados: 0,
+  tokensCirculando: 0,
+})
+
+const [loadingStats, setLoadingStats] = useState(true)
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -57,6 +66,73 @@ export default function Home() {
   const next = () => setSliderIdx(i => Math.min(CATEGORY_IMAGES.length - 3, i + 1))
 
   const visible = CATEGORY_IMAGES.slice(sliderIdx, sliderIdx + 3)
+
+useEffect(() => {
+  let active = true
+
+  async function loadStats() {
+    const { data, error } = await supabase
+      .rpc('obtener_estadisticas_inicio')
+      .single()
+
+    if (error) {
+      console.error('Error al cargar estadísticas:', error)
+      if (active) setLoadingStats(false)
+      return
+    }
+
+    if (active) {
+      setStats({
+        piezasDisponibles: Number(data.piezas_disponibles || 0),
+        intercambiosCompletados: Number(data.intercambios_completados || 0),
+        tokensCirculando: Number(data.tokens_circulando || 0),
+      })
+
+      setLoadingStats(false)
+    }
+  }
+
+  loadStats()
+
+  return () => {
+    active = false
+  }
+}, [])
+
+const formatTokens = (amount) => {
+  if (amount >= 1000) {
+    const value = amount / 1000
+    return `${value % 1 === 0 ? value : value.toFixed(1)}K`
+  }
+
+  return amount.toLocaleString('es-MX')
+}
+
+
+
+const metrics = [
+  {
+    value: loadingStats
+      ? '—'
+      : stats.piezasDisponibles.toLocaleString('es-MX'),
+    label: 'Piezas disponibles',
+    icon: <Package size={20} />,
+  },
+  {
+    value: loadingStats
+      ? '—'
+      : stats.intercambiosCompletados.toLocaleString('es-MX'),
+    label: 'Intercambios completados',
+    icon: <ArrowRightLeft size={20} />,
+  },
+  {
+    value: loadingStats
+      ? '—'
+      : formatTokens(stats.tokensCirculando),
+    label: 'Eco-Tokens circulando',
+    icon: <Zap size={20} />,
+  },
+]
 
   return (
     <Layout>
@@ -175,7 +251,7 @@ export default function Home() {
           Ir a la Bóveda <ArrowRight size={16}/>
         </button>
         <button
-          onClick={() => openAddProductModal()}
+          onClick={() => navigate('/publicar')}
           className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-brand-primary
                      text-brand-primary text-sm font-semibold hover:bg-brand-primary
                      hover:text-white active:scale-95 transition-all"
@@ -186,7 +262,7 @@ export default function Home() {
 
       {/* ── Platform stats ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-        {STATS.map(({ label, value, icon }) => (
+       {metrics.map(({ label, value, icon }) => (
           <div key={label} className="card p-5 flex items-center gap-4">
             <div className="w-11 h-11 rounded-xl bg-brand-bg flex items-center
                             justify-center text-brand-secondary flex-shrink-0">

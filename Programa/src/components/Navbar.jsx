@@ -10,7 +10,7 @@ import { useApp } from '../context/AppContext'
 export default function Navbar() {
   const {
     user, logout, pendingMatches,
-    openAddProductModal, openSearchPieceModal, openBuyTokensModal,
+     openSearchPieceModal, openBuyTokensModal,
     openChatWidget, chatWidget,
   } = useApp()
 
@@ -32,24 +32,20 @@ export default function Navbar() {
   const navLinks = [
     { to: '/',          label: 'Inicio',     action: null },
     { to: '/productos', label: 'Bóveda',     action: null },
-    { to: '/publicar',  label: 'Publicar',   action: 'publish' },
+    { to: '/publicar', label: 'Publicar', action: null },
     { to: '/buscar-pieza', label: 'Busco',   action: 'search' },
   ]
 
   const isActive = (to) =>
     to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
 
-  const handleNavClick = (link, e) => {
-    if (link.action === 'publish') {
-      e.preventDefault()
-      openAddProductModal()
-      setMenuOpen(false)
-    } else if (link.action === 'search') {
-      e.preventDefault()
-      openSearchPieceModal()
-      setMenuOpen(false)
-    }
+ const handleNavClick = (link, e) => {
+  if (link.action === 'search') {
+    e.preventDefault()
+    openSearchPieceModal()
+    setMenuOpen(false)
   }
+}
 
   const chatActive = chatWidget.dockOpen || chatWidget.openWindows.length > 0
 

@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { supabase } from '../supabaseClient'
 import { CHAT_MESSAGES } from '../data/mockData'
 
 const AppContext = createContext(null)
@@ -30,6 +31,47 @@ export function AppProvider({ children }) {
   const [toast, setToast]       = useState(null)
   const [pendingMatches, setPendingMatches] = useState(2)
 
+
+// ── Registro Real con Supabase ──
+  // ── Registro Real con Supabase ──
+const register = useCallback(async (email, password) => {
+  console.log("Enviando a Supabase el correo:", email);
+  
+  const { data, error } = await supabase.auth.signUp({
+    email: email,
+    password: password,
+  })
+  
+  console.log("Respuesta de Supabase:", { data, error });
+  
+  return { data, error }
+}, [])
+
+// ── Login Real con Supabase ──
+  const login = useCallback(async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    })
+
+    // Si no hay error, actualizamos el estado de autenticación
+    if (!error && data.user) {
+      // Nota: Mantenemos MOCK_USER temporalmente fusionado con el email real 
+      // para que no se rompan las imágenes y datos de la maqueta de Elías.
+   setUser({
+  ...MOCK_USER,
+  id: data.user.id,
+  email: data.user.email,
+  name: data.user.email.split('@')[0],
+  tokens: 0,
+})
+
+      setIsAuth(true)
+    }
+
+    return { data, error }
+  }, [])
+
   // ── Modals ──
   const [addProductModal, setAddProductModal] = useState({ isOpen: false, editId: null })
   const [buyTokensModalOpen, setBuyTokensModalOpen] = useState(false)
@@ -44,11 +86,7 @@ export function AppProvider({ children }) {
     messages: buildMessagesMap(),
   })
 
-  const login = useCallback((email, _password) => {
-    setUser({ ...MOCK_USER, email })
-    setIsAuth(true)
-  }, [])
-
+ 
   const logout = useCallback(() => {
     setIsAuth(false)
     setUser(null)
@@ -58,6 +96,13 @@ export function AppProvider({ children }) {
   const addTokens = useCallback((amount) => {
     setUser(u => ({ ...u, tokens: u.tokens + amount }))
   }, [])
+
+
+const setTokenBalance = useCallback((amount) => {
+  setUser(current =>
+    current ? { ...current, tokens: amount } : current
+  )
+}, [])
 
   const spendTokens = useCallback((amount) => {
     setUser(u => ({
@@ -165,16 +210,98 @@ export function AppProvider({ children }) {
     return matchId
   }, [showToast])
 
+
+
+const [authReady, setAuthReady] = useState(false)
+
+useEffect(() => {
+  let active = true
+
+  async function applySession(session) {
+    if (!active) return
+
+    if (!session?.user) {
+      setUser(null)
+      setIsAuth(false)
+      setAuthReady(true)
+      return
+    }
+
+const [{ data: wallet, error: walletError }, { data: profile, error: profileError }] =
+  await Promise.all([
+    supabase
+      .from('billeteras')
+      .select('saldo_eco_tokens')
+      .eq('id_usuario', session.user.id)
+      .maybeSingle(),
+
+    supabase
+      .from('profiles')
+      .select('nombre')
+      .eq('id', session.user.id)
+      .maybeSingle(),
+  ])
+
+if (walletError) {
+  console.error('Error al cargar billetera:', walletError)
+}
+
+if (profileError) {
+  console.error('Error al cargar perfil:', profileError)
+}
+
+if (!active) return
+
+setUser({
+  ...MOCK_USER,
+  id: session.user.id,
+  email: session.user.email,
+  name:
+    profile?.nombre ||
+    session.user.user_metadata?.nombre ||
+    session.user.email.split('@')[0],
+  tokens: wallet?.saldo_eco_tokens ?? 0,
+})
+
+setIsAuth(true)
+setAuthReady(true)
+  }
+
+  supabase.auth.getSession().then(({ data, error }) => {
+    if (error) {
+      console.error('Error al recuperar sesión:', error)
+    }
+
+    void applySession(data.session)
+  })
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    void applySession(session)
+  })
+
+  return () => {
+    active = false
+    subscription.unsubscribe()
+  }
+}, [])
+
+
+
   return (
     <AppContext.Provider
       value={{
+        register,
         user,
+        authReady,
         isAuth,
         pendingMatches,
         toast,
         login,
         logout,
         addTokens,
+        setTokenBalance,
         spendTokens,
         showToast,
         setPendingMatches,
