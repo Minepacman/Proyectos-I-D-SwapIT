@@ -3,6 +3,7 @@ import { Search, Zap, Bell, CheckCircle } from 'lucide-react'
 import Modal from './Modal'
 import { useApp } from '../context/AppContext'
 import { supabase } from '../supabaseClient'
+import { useNavigate } from 'react-router-dom'
 
 const CATEGORIES = [
   { value: 'hw', label: 'Hardware de computadora' },
@@ -19,6 +20,8 @@ export default function SearchPieceModal() {
     showToast,
   } = useApp()
 
+  const navigate = useNavigate()
+
   const [form, setForm] = useState({
     category: '',
     description: '',
@@ -30,6 +33,8 @@ export default function SearchPieceModal() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [matchCount, setMatchCount] = useState(0)
+
+
 
   const handleClose = () => {
     closeSearchPieceModal()
@@ -46,6 +51,15 @@ export default function SearchPieceModal() {
       setErrors({})
     }, 300)
   }
+
+
+const handleSuccessContinue = () => {
+  handleClose()
+
+  if (matchCount > 0) {
+    navigate('/matches')
+  }
+}
 
   const handle = (e) => {
     const { name, value, type, checked } = e.target
@@ -209,9 +223,17 @@ export default function SearchPieceModal() {
               : 'Te notificaremos cuando aparezca una pieza compatible en la Bóveda.'}
           </p>
 
-          <button onClick={handleClose} className="btn-primary max-w-xs mx-auto">
-            Entendido
-          </button>
+       <button
+  onClick={() => {
+    const hasMatches = matchCount > 0
+    handleClose()
+    if (hasMatches) navigate('/matches')
+  }}
+  className="btn-primary max-w-xs mx-auto"
+>
+  {matchCount > 0 ? 'Ver matches' : 'Entendido'}
+</button>
+
         </div>
       ) : (
         <>

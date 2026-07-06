@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Zap, Star, ArrowRightLeft } from 'lucide-react'
 
 export default function ProductCard({ product }) {
+  const navigate = useNavigate()
   const [imageError, setImageError] = useState(false)
 
   const {
@@ -102,8 +103,13 @@ export default function ProductCard({ product }) {
           </div>
 
           <button
+            type="button"
             className="flex items-center gap-1.5 text-xs font-semibold text-brand-secondary hover:text-brand-primary transition-colors"
-            onClick={(e) => e.preventDefault()}
+            onClick={event => {
+              event.preventDefault()
+              event.stopPropagation()
+              navigate(`/productos/${id}`)
+            }}
           >
             <ArrowRightLeft size={13} />
             Canjear

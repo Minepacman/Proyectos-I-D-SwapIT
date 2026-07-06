@@ -7,6 +7,7 @@ import {
   ArrowRightLeft,
   ChevronRight,
   Loader2,
+  X,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabaseClient'
@@ -20,6 +21,18 @@ function getCategoryName(categorias) {
   return categorias?.nombre || 'Sin categoría'
 }
 
+function formatDisplayName(value = '') {
+  const raw = String(value || '').trim()
+
+  if (!raw) return ''
+
+  return raw
+    .split(/[._\-\s]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 function parsePublication(item) {
   let name = 'Componente'
   let description = item.descripcion || 'Sin descripción'
@@ -31,29 +44,34 @@ function parsePublication(item) {
     description = match[2]
   }
 
-const publishedBy = Array.isArray(item.autor)
-  ? item.autor[0]?.nombre
-  : item.autor?.nombre
+  const author = Array.isArray(item.autor)
+    ? item.autor[0]
+    : item.autor
+
+  const publishedBy = formatDisplayName(
+    author?.nombre || author?.correo?.split('@')[0]
+  )
 
   return {
-  id: item.id_publicacion,
-  categoryId: item.id_categoria,
-  name,
-  description,
-  category: getCategoryName(item.categorias),
-  condition: item.estado_fisico ?? 1,
-  tokenValue: item.valor_eco_tokens ?? 0,
-  image: item.url_foto,
-  status: item.estatus || 'Disponible',
-  publishedBy: publishedBy || 'Usuario sin nombre',
-  publishedAt: item.fecha_publicacion
-    ? new Date(item.fecha_publicacion).toLocaleDateString('es-MX', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
-    : 'Recién publicado',
-}
+    id: item.id_publicacion,
+    ownerId: item.id_usuario,
+    categoryId: item.id_categoria,
+    name,
+    description,
+    category: getCategoryName(item.categorias),
+    condition: item.estado_fisico ?? 1,
+    tokenValue: Number(item.valor_eco_tokens ?? 0),
+    image: item.url_foto,
+    status: item.estatus || 'Disponible',
+    publishedBy: publishedBy || 'Usuario sin nombre',
+    publishedAt: item.fecha_publicacion
+      ? new Date(item.fecha_publicacion).toLocaleDateString('es-MX', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : 'Recién publicado',
+  }
 }
 
 function getIcon(category = '') {
@@ -70,13 +88,18 @@ function getIcon(category = '') {
 export default function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { showToast } = useApp()
+  const { user, showToast } = useApp()
 
   const [product, setProduct] = useState(null)
   const [similarProducts, setSimilarProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [exchangeLoading, setExchangeLoading] = useState(false)
   const [imageError, setImageError] = useState(false)
+
+  const [offerSelectorOpen, setOfferSelectorOpen] = useState(false)
+  const [myAvailablePieces, setMyAvailablePieces] = useState([])
+  const [loadingMyPieces, setLoadingMyPieces] = useState(false)
+  const [selectedOfferId, setSelectedOfferId] = useState('')
 
   useEffect(() => {
     let active = true
@@ -89,6 +112,7 @@ export default function ProductDetail() {
         .from('publicaciones')
         .select(`
           id_publicacion,
+          id_usuario,
           id_categoria,
           descripcion,
           estado_fisico,
@@ -97,7 +121,7 @@ export default function ProductDetail() {
           estatus,
           fecha_publicacion,
           categorias ( nombre ),
-          autor:profiles!publicaciones_id_usuario_fkey ( nombre )
+          autor:profiles!publicaciones_id_usuario_fkey ( nombre, correo )
         `)
         .eq('id_publicacion', id)
         .single()
@@ -123,6 +147,7 @@ export default function ProductDetail() {
         .from('publicaciones')
         .select(`
           id_publicacion,
+          id_usuario,
           id_categoria,
           descripcion,
           estado_fisico,
@@ -155,14 +180,106 @@ export default function ProductDetail() {
     }
   }, [id])
 
+  const closeOfferSelector = () => {
+    if (exchangeLoading) return
+
+    setOfferSelectorOpen(false)
+    setSelectedOfferId('')
+  }
+
+  const openOfferSelector = async () => {
+    if (!user?.id) {
+      showToast('Inicia sesión para proponer un intercambio.', 'error')
+      return
+    }
+
+    if (product.ownerId === user.id) {
+      showToast(
+        'No puedes proponer un intercambio por tu propia publicación.',
+        'error'
+      )
+      return
+    }
+
+    setOfferSelectorOpen(true)
+    setSelectedOfferId('')
+    setLoadingMyPieces(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('publicaciones')
+        .select(`
+          id_publicacion,
+          id_usuario,
+          id_categoria,
+          descripcion,
+          estado_fisico,
+          valor_eco_tokens,
+          url_foto,
+          estatus,
+          fecha_publicacion,
+          categorias ( nombre )
+        `)
+        .eq('id_usuario', user.id)
+        .eq('tipo', 'Ofrezco')
+        .eq('estatus', 'Disponible')
+        .order('fecha_publicacion', { ascending: false })
+
+      if (error) throw error
+
+      setMyAvailablePieces((data || []).map(parsePublication))
+    } catch (error) {
+      console.error('Error al cargar tus piezas disponibles:', error)
+      showToast(
+        error.message || 'No se pudieron cargar tus piezas disponibles.',
+        'error'
+      )
+      setMyAvailablePieces([])
+    } finally {
+      setLoadingMyPieces(false)
+    }
+  }
+
   const handleExchange = async () => {
+    if (!user?.id || !selectedOfferId) {
+      showToast('Selecciona la pieza que ofrecerás.', 'error')
+      return
+    }
+
     setExchangeLoading(true)
 
-    await new Promise(resolve => setTimeout(resolve, 700))
+    try {
+      const { data, error } = await supabase.rpc(
+        'proponer_intercambio_directo',
+        {
+          p_publicacion_objetivo: product.id,
+          p_publicacion_contraoferta: selectedOfferId,
+        }
+      )
 
-    showToast('¡Propuesta de trueque enviada!')
-    setExchangeLoading(false)
-    navigate('/matches')
+      if (error) throw error
+
+      const matchId = Array.isArray(data)
+        ? data[0]?.id_match || data[0]
+        : data
+
+      if (!matchId) {
+        throw new Error('No se recibió el identificador del match creado.')
+      }
+
+      showToast('¡Propuesta enviada! Espera la respuesta de la contraparte.')
+      setOfferSelectorOpen(false)
+      setSelectedOfferId('')
+      navigate(`/match/${matchId}`)
+    } catch (error) {
+      console.error('Error al proponer intercambio:', error)
+      showToast(
+        error.message || 'No se pudo crear la propuesta de intercambio.',
+        'error'
+      )
+    } finally {
+      setExchangeLoading(false)
+    }
   }
 
   if (loading) {
@@ -209,6 +326,8 @@ export default function ProductDetail() {
       : product.status === 'En Proceso'
         ? 'badge-status-process'
         : 'badge-status-inactive'
+
+  const isOwnProduct = product.ownerId === user?.id
 
   return (
     <Layout>
@@ -364,9 +483,17 @@ export default function ProductDetail() {
             ))}
           </div>
 
-          {product.status === 'Disponible' ? (
+          {product.status !== 'Disponible' ? (
+            <div className="w-full py-3 rounded-xl bg-brand-border/40 text-center text-sm font-semibold text-brand-muted">
+              Pieza en proceso de intercambio
+            </div>
+          ) : isOwnProduct ? (
+            <div className="w-full py-3 rounded-xl bg-blue-50 border border-blue-200 text-center text-sm font-semibold text-brand-secondary">
+              Esta es tu publicación
+            </div>
+          ) : (
             <button
-              onClick={handleExchange}
+              onClick={openOfferSelector}
               disabled={exchangeLoading}
               className="btn-primary flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
@@ -379,14 +506,10 @@ export default function ProductDetail() {
                 </>
               )}
             </button>
-          ) : (
-            <div className="w-full py-3 rounded-xl bg-brand-border/40 text-center text-sm font-semibold text-brand-muted">
-              Pieza en proceso de intercambio
-            </div>
           )}
 
           <p className="text-xs text-center text-brand-muted mt-3">
-            Al proponer un intercambio, ambas piezas se bloquean temporalmente.
+            La propuesta quedará pendiente hasta que ambas personas la acepten.
           </p>
         </div>
       </div>
@@ -441,6 +564,184 @@ export default function ProductDetail() {
           </div>
         </div>
       )}
+      {offerSelectorOpen && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4"
+          onClick={closeOfferSelector}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 p-6 border-b border-brand-border">
+              <div>
+                <h2 className="text-xl font-bold text-brand-primary">
+                  Elige la pieza que ofrecerás
+                </h2>
+                <p className="text-sm text-brand-muted mt-1">
+                  Quieres recibir: <span className="font-semibold">{product.name}</span>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeOfferSelector}
+                disabled={exchangeLoading}
+                className="p-2 rounded-lg text-brand-muted hover:text-brand-primary hover:bg-brand-bg disabled:opacity-40"
+                aria-label="Cerrar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {loadingMyPieces ? (
+                <div className="flex flex-col items-center justify-center py-12 text-brand-muted">
+                  <Loader2 size={28} className="animate-spin mb-3" />
+                  <p className="text-sm">Cargando tus piezas disponibles...</p>
+                </div>
+              ) : myAvailablePieces.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-4xl mb-3">📦</p>
+                  <p className="font-semibold text-brand-primary mb-2">
+                    No tienes piezas disponibles para ofrecer
+                  </p>
+                  <p className="text-sm text-brand-muted mb-5">
+                    Primero publica una pieza en tu inventario y después podrás usarla en un intercambio.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/publicar')}
+                    className="btn-primary max-w-xs mx-auto"
+                  >
+                    Publicar una pieza
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs font-bold text-brand-muted uppercase tracking-wide mb-3">
+                    Tus piezas disponibles
+                  </p>
+
+                  <div className="space-y-3">
+                    {myAvailablePieces.map(piece => {
+                      const selected = selectedOfferId === piece.id
+
+                      return (
+                        <button
+                          key={piece.id}
+                          type="button"
+                          onClick={() => setSelectedOfferId(piece.id)}
+                          className={`w-full text-left rounded-xl border-2 p-3 flex items-center gap-3 transition-all ${
+                            selected
+                              ? 'border-brand-secondary bg-blue-50 shadow-sm'
+                              : 'border-brand-border hover:border-brand-secondary/50'
+                          }`}
+                        >
+                          <div className="w-16 h-16 rounded-xl overflow-hidden bg-brand-bg flex-shrink-0">
+                            {piece.image ? (
+                              <img
+                                src={piece.image}
+                                alt={piece.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-full flex items-center justify-center text-2xl">
+                                {getIcon(piece.category)}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-brand-primary truncate">
+                              {piece.name}
+                            </p>
+                            <p className="text-xs text-brand-muted mt-1">
+                              {piece.category} · Estado {piece.condition}/10
+                            </p>
+                            <p className="text-xs text-brand-token font-semibold flex items-center gap-1 mt-1">
+                              <Zap size={11} />
+                              {piece.tokenValue.toLocaleString('es-MX')} Eco-Tokens
+                            </p>
+                          </div>
+
+                          <span
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                              selected
+                                ? 'border-brand-secondary bg-brand-secondary'
+                                : 'border-brand-border'
+                            }`}
+                          >
+                            {selected && <span className="w-2 h-2 rounded-full bg-white" />}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {selectedOfferId && (() => {
+                    const selectedPiece = myAvailablePieces.find(
+                      piece => piece.id === selectedOfferId
+                    )
+
+                    const difference = Math.abs(
+                      Number(product.tokenValue) -
+                      Number(selectedPiece?.tokenValue || 0)
+                    )
+
+                    return (
+                      <div className="mt-5 rounded-xl border border-brand-border bg-brand-bg p-4 text-sm">
+                        <p className="font-semibold text-brand-primary">
+                          Intercambio propuesto
+                        </p>
+                        <p className="text-brand-muted mt-1">
+                          Ofrecerás <strong>{selectedPiece?.name}</strong> por{' '}
+                          <strong>{product.name}</strong>.
+                        </p>
+                        <p className="text-brand-muted mt-1">
+                          {difference === 0
+                            ? 'Las piezas tienen el mismo valor: no habrá compensación adicional.'
+                            : Number(product.tokenValue) > Number(selectedPiece?.tokenValue || 0)
+                              ? `Además pagarás ${difference.toLocaleString('es-MX')} Eco-Tokens al finalizar.`
+                              : `La contraparte pagará ${difference.toLocaleString('es-MX')} Eco-Tokens al finalizar.`}
+                        </p>
+                      </div>
+                    )
+                  })()}
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={closeOfferSelector}
+                      disabled={exchangeLoading}
+                      className="flex-1 py-3 rounded-xl border-2 border-brand-border text-sm font-semibold text-brand-muted hover:border-brand-primary hover:text-brand-primary disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExchange}
+                      disabled={!selectedOfferId || exchangeLoading}
+                      className="flex-1 py-3 rounded-xl bg-brand-gradient text-white text-sm font-semibold shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {exchangeLoading ? (
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <ArrowRightLeft size={16} />
+                          Enviar propuesta
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </Layout>
   )
 }

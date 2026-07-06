@@ -1,122 +1,108 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { CHAT_MESSAGES } from '../data/mockData'
 
 const AppContext = createContext(null)
 
 const MOCK_USER = {
   id: 'user-001',
-  name: 'Elías Sánchez',
-  email: 'elias.sanchez@alumno.buap.mx',
+  name: 'Usuario SwapIT',
+  email: '',
   avatar: null,
-  reputation: 4.7,
-  reviewCount: 12,
-  tokens: 2000,
+  reputation: 0,
+  reviewCount: 0,
+  tokens: 0,
   verified: true,
-  joinedAt: '2024-08-15',
+  joinedAt: null,
 }
 
-function buildMessagesMap() {
-  const map = {}
-  CHAT_MESSAGES.forEach(msg => {
-    if (!map[msg.matchId]) map[msg.matchId] = []
-    map[msg.matchId].push(msg)
-  })
-  return map
+const EMPTY_CHAT_WIDGET = {
+  dockOpen: false,
+  openWindows: [],
+  minimized: {},
 }
 
 export function AppProvider({ children }) {
-  const [user, setUser]         = useState(MOCK_USER)
-  const [isAuth, setIsAuth]     = useState(false)
-  const [toast, setToast]       = useState(null)
-  const [pendingMatches, setPendingMatches] = useState(2)
+  const [user, setUser] = useState(null)
+  const [isAuth, setIsAuth] = useState(false)
+  const [authReady, setAuthReady] = useState(false)
+  const [toast, setToast] = useState(null)
 
+  // Mantiene el nombre anterior para no romper componentes existentes:
+  // ahora representa el número real de notificaciones sin leer.
+  const [pendingMatches, setPendingMatches] = useState(0)
+  const [notifications, setNotifications] = useState([])
 
-// ── Registro Real con Supabase ──
-  // ── Registro Real con Supabase ──
-const register = useCallback(async (email, password) => {
-  console.log("Enviando a Supabase el correo:", email);
-  
-  const { data, error } = await supabase.auth.signUp({
-    email: email,
-    password: password,
+  const [addProductModal, setAddProductModal] = useState({
+    isOpen: false,
+    editId: null,
   })
-  
-  console.log("Respuesta de Supabase:", { data, error });
-  
-  return { data, error }
-}, [])
+  const [buyTokensModalOpen, setBuyTokensModalOpen] = useState(false)
+  const [searchPieceModalOpen, setSearchPieceModalOpen] = useState(false)
+  const [ratingModal, setRatingModal] = useState({
+    isOpen: false,
+    userName: '',
+    matchId: null,
+  })
 
-// ── Login Real con Supabase ──
+  const [chatWidget, setChatWidget] = useState(EMPTY_CHAT_WIDGET)
+
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type })
+    window.setTimeout(() => setToast(null), 3500)
+  }, [])
+
+  const register = useCallback(async (email, password) => {
+    return supabase.auth.signUp({ email, password })
+  }, [])
+
   const login = useCallback(async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
+      email,
+      password,
     })
 
-    // Si no hay error, actualizamos el estado de autenticación
     if (!error && data.user) {
-      // Nota: Mantenemos MOCK_USER temporalmente fusionado con el email real 
-      // para que no se rompan las imágenes y datos de la maqueta de Elías.
-   setUser({
-  ...MOCK_USER,
-  id: data.user.id,
-  email: data.user.email,
-  name: data.user.email.split('@')[0],
-  tokens: 0,
-})
-
+      setUser({
+        ...MOCK_USER,
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.email?.split('@')[0] || 'Usuario SwapIT',
+      })
       setIsAuth(true)
     }
 
     return { data, error }
   }, [])
 
-  // ── Modals ──
-  const [addProductModal, setAddProductModal] = useState({ isOpen: false, editId: null })
-  const [buyTokensModalOpen, setBuyTokensModalOpen] = useState(false)
-  const [searchPieceModalOpen, setSearchPieceModalOpen] = useState(false)
-  const [ratingModal, setRatingModal] = useState({ isOpen: false, userName: '', matchId: null })
-
-  // ── Chat widget (Facebook-style) ──
-  const [chatWidget, setChatWidget] = useState({
-    dockOpen: false,
-    openWindows: [],
-    minimized: {},
-    messages: buildMessagesMap(),
-  })
-
- 
   const logout = useCallback(() => {
-    setIsAuth(false)
+    void supabase.auth.signOut()
     setUser(null)
-    setChatWidget({ dockOpen: false, openWindows: [], minimized: {}, messages: buildMessagesMap() })
+    setIsAuth(false)
+    setNotifications([])
+    setPendingMatches(0)
+    setChatWidget(EMPTY_CHAT_WIDGET)
   }, [])
 
   const addTokens = useCallback((amount) => {
-    setUser(u => ({ ...u, tokens: u.tokens + amount }))
+    setUser(current =>
+      current ? { ...current, tokens: current.tokens + amount } : current
+    )
   }, [])
 
-
-const setTokenBalance = useCallback((amount) => {
-  setUser(current =>
-    current ? { ...current, tokens: amount } : current
-  )
-}, [])
+  const setTokenBalance = useCallback((amount) => {
+    setUser(current =>
+      current ? { ...current, tokens: Number(amount) || 0 } : current
+    )
+  }, [])
 
   const spendTokens = useCallback((amount) => {
-    setUser(u => ({
-      ...u,
-      tokens: Math.max(0, u.tokens - amount),
-    }))
+    setUser(current =>
+      current
+        ? { ...current, tokens: Math.max(0, current.tokens - amount) }
+        : current
+    )
   }, [])
 
-  const showToast = useCallback((message, type = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3500)
-  }, [])
-
-  // ── Modal actions ──
   const openAddProductModal = useCallback((editId = null) => {
     setAddProductModal({ isOpen: true, editId })
   }, [])
@@ -128,8 +114,14 @@ const setTokenBalance = useCallback((amount) => {
   const openBuyTokensModal = useCallback(() => setBuyTokensModalOpen(true), [])
   const closeBuyTokensModal = useCallback(() => setBuyTokensModalOpen(false), [])
 
-  const openSearchPieceModal = useCallback(() => setSearchPieceModalOpen(true), [])
-  const closeSearchPieceModal = useCallback(() => setSearchPieceModalOpen(false), [])
+  const openSearchPieceModal = useCallback(
+    () => setSearchPieceModalOpen(true),
+    []
+  )
+  const closeSearchPieceModal = useCallback(
+    () => setSearchPieceModalOpen(false),
+    []
+  )
 
   const openRatingModal = useCallback((userName, matchId) => {
     setRatingModal({ isOpen: true, userName, matchId })
@@ -139,155 +131,271 @@ const setTokenBalance = useCallback((amount) => {
     setRatingModal({ isOpen: false, userName: '', matchId: null })
   }, [])
 
-  // ── Chat actions ──
   const toggleChatDock = useCallback(() => {
-    setChatWidget(prev => ({ ...prev, dockOpen: !prev.dockOpen }))
+    setChatWidget(current => ({
+      ...current,
+      dockOpen: !current.dockOpen,
+    }))
   }, [])
 
   const openChatWidget = useCallback((matchId = null) => {
-    setChatWidget(prev => {
-      const next = { ...prev, dockOpen: true }
-      if (matchId && !prev.openWindows.includes(matchId)) {
-        next.openWindows = [...prev.openWindows, matchId]
-        next.minimized = { ...prev.minimized, [matchId]: false }
+    setChatWidget(current => {
+      const next = { ...current, dockOpen: true }
+
+      if (matchId && !current.openWindows.includes(matchId)) {
+        next.openWindows = [...current.openWindows, matchId]
+        next.minimized = { ...current.minimized, [matchId]: false }
       }
+
       return next
     })
   }, [])
 
   const closeChatWidget = useCallback(() => {
-    setChatWidget(prev => ({ ...prev, dockOpen: false, openWindows: [], minimized: {} }))
+    setChatWidget(EMPTY_CHAT_WIDGET)
   }, [])
 
   const openChatWindow = useCallback((matchId) => {
-    setChatWidget(prev => {
-      const minimized = { ...prev.minimized, [matchId]: false }
-      const openWindows = prev.openWindows.includes(matchId)
-        ? prev.openWindows
-        : [...prev.openWindows, matchId]
-      return { ...prev, dockOpen: true, openWindows, minimized }
-    })
-  }, [])
-
-  const closeChatWindow = useCallback((matchId) => {
-    setChatWidget(prev => ({
-      ...prev,
-      openWindows: prev.openWindows.filter(id => id !== matchId),
-      minimized: { ...prev.minimized, [matchId]: false },
-    }))
-  }, [])
-
-  const minimizeChatWindow = useCallback((matchId) => {
-    setChatWidget(prev => ({
-      ...prev,
-      minimized: { ...prev.minimized, [matchId]: !prev.minimized[matchId] },
-    }))
-  }, [])
-
-  const sendChatMessage = useCallback((matchId, text) => {
-    setChatWidget(prev => ({
-      ...prev,
-      messages: {
-        ...prev.messages,
-        [matchId]: [
-          ...(prev.messages[matchId] ?? []),
-          {
-            id: `msg-${Date.now()}`,
-            matchId,
-            sender: 'Tú',
-            text,
-            timestamp: new Date().toISOString(),
-            isOwn: true,
-          },
-        ],
+    setChatWidget(current => ({
+      ...current,
+      dockOpen: true,
+      openWindows: current.openWindows.includes(matchId)
+        ? current.openWindows
+        : [...current.openWindows, matchId],
+      minimized: {
+        ...current.minimized,
+        [matchId]: false,
       },
     }))
   }, [])
 
-  const confirmDelivery = useCallback(async (matchId) => {
-    await new Promise(r => setTimeout(r, 600))
-    showToast('¡Entrega confirmada! Califica al usuario.')
-    return matchId
-  }, [showToast])
+  const closeChatWindow = useCallback((matchId) => {
+    setChatWidget(current => ({
+      ...current,
+      openWindows: current.openWindows.filter(id => id !== matchId),
+      minimized: {
+        ...current.minimized,
+        [matchId]: false,
+      },
+    }))
+  }, [])
 
+  const minimizeChatWindow = useCallback((matchId) => {
+    setChatWidget(current => ({
+      ...current,
+      minimized: {
+        ...current.minimized,
+        [matchId]: !current.minimized[matchId],
+      },
+    }))
+  }, [])
 
+  const sendChatMessage = useCallback(async (matchId, text) => {
+    const content = text.trim()
 
-const [authReady, setAuthReady] = useState(false)
+    if (!content) {
+      return { data: null, error: new Error('Escribe un mensaje.') }
+    }
 
-useEffect(() => {
-  let active = true
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-  async function applySession(session) {
-    if (!active) return
+    if (authError || !authUser) {
+      return {
+        data: null,
+        error: new Error('Debes iniciar sesión para enviar mensajes.'),
+      }
+    }
 
-    if (!session?.user) {
-      setUser(null)
-      setIsAuth(false)
-      setAuthReady(true)
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select('id_chat')
+      .eq('id_match', matchId)
+      .eq('activo', true)
+      .maybeSingle()
+
+    if (chatError || !chat) {
+      return {
+        data: null,
+        error: new Error('El chat aún no está habilitado para este match.'),
+      }
+    }
+
+    return supabase
+      .from('mensajes')
+      .insert({
+        id_chat: chat.id_chat,
+        id_remitente: authUser.id,
+        contenido: content,
+      })
+      .select('id_mensaje, id_chat, id_remitente, contenido, fecha_envio')
+      .single()
+  }, [])
+
+  const confirmDelivery = useCallback(
+    async (matchId) => {
+      const { data, error } = await supabase.rpc('confirmar_entrega_match', {
+        p_match_id: matchId,
+      })
+
+      if (error) {
+        showToast(error.message || 'No se pudo confirmar la entrega.', 'error')
+        return { data: null, error }
+      }
+
+      const result = Array.isArray(data) ? data[0] : data
+
+      showToast(
+        result?.finalizado
+          ? 'Intercambio finalizado y Eco-Tokens liquidados.'
+          : 'Confirmaste la entrega. Falta la confirmación de la contraparte.'
+      )
+
+      return { data: result, error: null }
+    },
+    [showToast]
+  )
+
+  const refreshNotifications = useCallback(async () => {
+    if (!user?.id) {
+      setNotifications([])
+      setPendingMatches(0)
       return
     }
 
-const [{ data: wallet, error: walletError }, { data: profile, error: profileError }] =
-  await Promise.all([
-    supabase
-      .from('billeteras')
-      .select('saldo_eco_tokens')
-      .eq('id_usuario', session.user.id)
-      .maybeSingle(),
+    const { data, error } = await supabase
+      .from('notificaciones')
+      .select('id_notificacion, tipo_evento, mensaje, leida, fecha')
+      .eq('id_usuario', user.id)
+      .order('fecha', { ascending: false })
+      .limit(10)
 
-    supabase
-      .from('profiles')
-      .select('nombre')
-      .eq('id', session.user.id)
-      .maybeSingle(),
-  ])
-
-if (walletError) {
-  console.error('Error al cargar billetera:', walletError)
-}
-
-if (profileError) {
-  console.error('Error al cargar perfil:', profileError)
-}
-
-if (!active) return
-
-setUser({
-  ...MOCK_USER,
-  id: session.user.id,
-  email: session.user.email,
-  name:
-    profile?.nombre ||
-    session.user.user_metadata?.nombre ||
-    session.user.email.split('@')[0],
-  tokens: wallet?.saldo_eco_tokens ?? 0,
-})
-
-setIsAuth(true)
-setAuthReady(true)
-  }
-
-  supabase.auth.getSession().then(({ data, error }) => {
     if (error) {
-      console.error('Error al recuperar sesión:', error)
+      console.error('Error al cargar notificaciones:', error)
+      return
     }
 
-    void applySession(data.session)
-  })
+    const nextNotifications = data || []
+    setNotifications(nextNotifications)
+    setPendingMatches(nextNotifications.filter(item => !item.leida).length)
+  }, [user?.id])
 
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    void applySession(session)
-  })
+  const markNotificationAsRead = useCallback(async (notificationId) => {
+    const { error } = await supabase
+      .from('notificaciones')
+      .update({ leida: true })
+      .eq('id_notificacion', notificationId)
 
-  return () => {
-    active = false
-    subscription.unsubscribe()
-  }
-}, [])
+    if (error) {
+      console.error('No se pudo marcar la notificación:', error)
+      return
+    }
 
+    setNotifications(current =>
+      current.map(item =>
+        item.id_notificacion === notificationId
+          ? { ...item, leida: true }
+          : item
+      )
+    )
 
+    setPendingMatches(current => Math.max(0, current - 1))
+  }, [])
+
+  useEffect(() => {
+    let active = true
+
+    async function applySession(session) {
+      if (!active) return
+
+      if (!session?.user) {
+        setUser(null)
+        setIsAuth(false)
+        setAuthReady(true)
+        return
+      }
+
+      const [
+        { data: wallet, error: walletError },
+        { data: profile, error: profileError },
+      ] = await Promise.all([
+        supabase
+          .from('billeteras')
+          .select('saldo_eco_tokens')
+          .eq('id_usuario', session.user.id)
+          .maybeSingle(),
+        supabase
+          .from('profiles')
+          .select('nombre')
+          .eq('id', session.user.id)
+          .maybeSingle(),
+      ])
+
+      if (walletError) console.error('Error al cargar billetera:', walletError)
+      if (profileError) console.error('Error al cargar perfil:', profileError)
+
+      if (!active) return
+
+      setUser({
+        ...MOCK_USER,
+        id: session.user.id,
+        email: session.user.email,
+        name:
+          profile?.nombre ||
+          session.user.user_metadata?.nombre ||
+          session.user.email?.split('@')[0] ||
+          'Usuario SwapIT',
+        tokens: wallet?.saldo_eco_tokens ?? 0,
+      })
+
+      setIsAuth(true)
+      setAuthReady(true)
+    }
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) console.error('Error al recuperar sesión:', error)
+      void applySession(data.session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void applySession(session)
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!user?.id) return undefined
+
+    void refreshNotifications()
+
+    const channel = supabase
+      .channel(`notificaciones-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notificaciones',
+          filter: `id_usuario=eq.${user.id}`,
+        },
+        () => {
+          void refreshNotifications()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, refreshNotifications])
 
   return (
     <AppContext.Provider
@@ -296,7 +404,6 @@ setAuthReady(true)
         user,
         authReady,
         isAuth,
-        pendingMatches,
         toast,
         login,
         logout,
@@ -304,8 +411,13 @@ setAuthReady(true)
         setTokenBalance,
         spendTokens,
         showToast,
+
+        pendingMatches,
         setPendingMatches,
-        // Modals
+        notifications,
+        refreshNotifications,
+        markNotificationAsRead,
+
         addProductModal,
         openAddProductModal,
         closeAddProductModal,
@@ -318,7 +430,7 @@ setAuthReady(true)
         ratingModal,
         openRatingModal,
         closeRatingModal,
-        // Chat
+
         chatWidget,
         toggleChatDock,
         openChatWidget,
@@ -331,14 +443,16 @@ setAuthReady(true)
       }}
     >
       {children}
+
       {toast && (
         <div
           className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] px-5 py-3 rounded-xl
                       shadow-xl text-sm font-medium text-white min-w-64 text-center
-                      transition-all
-                      ${toast.type === 'success' ? 'bg-brand-success'
-                        : toast.type === 'error'   ? 'bg-brand-danger'
-                        : 'bg-brand-primary'}`}
+                      ${toast.type === 'success'
+                        ? 'bg-brand-success'
+                        : toast.type === 'error'
+                          ? 'bg-brand-danger'
+                          : 'bg-brand-primary'}`}
         >
           {toast.message}
         </div>
@@ -348,7 +462,11 @@ setAuthReady(true)
 }
 
 export function useApp() {
-  const ctx = useContext(AppContext)
-  if (!ctx) throw new Error('useApp must be used inside AppProvider')
-  return ctx
+  const context = useContext(AppContext)
+
+  if (!context) {
+    throw new Error('useApp must be used inside AppProvider')
+  }
+
+  return context
 }
